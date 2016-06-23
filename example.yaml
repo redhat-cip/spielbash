@@ -1,0 +1,9 @@
+scenes: 
+  - name: Noice
+    line: Here is a list of files. Nice!
+  - name: listing
+    action: ls -al
+  - name: show file
+    action: cat README.md
+  - name: end
+    line: Hope you enjoyed it!
