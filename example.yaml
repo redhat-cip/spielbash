@@ -1,9 +1,13 @@
+title: a beautiful movie
 scenes: 
   - name: Noice
     line: Here is a list of files. Nice!
   - name: listing
     action: ls -al
-  - name: show file
-    action: cat README.md
+    keep:
+      - var: myfile
+        regex: \w+\.md$
+  - name: show file(s)
+    action: cat myfile
   - name: end
     line: Hope you enjoyed it!
