@@ -2,6 +2,8 @@
 
 import argparse
 import json
+import pipes
+import re
 import subprocess
 import sys
 import time
@@ -73,12 +75,15 @@ class Dialogue(BaseAction):
 
 
 class Scene(BaseAction):
-    def __init__(self, name, cmd, session, *args, **kwargs):
+    def __init__(self, name, cmd, session, keep, movie, *args, **kwargs):
         self.name = name
         self.cmd = cmd
         self.session = session
         self.original_buffer = self._get_buffer().strip('\n')
         self.output = None
+        self.movie = movie
+        self.to_keep = dict((u['var'],
+                             re.compile(u['regex'], re.M)) for u in keep)
 
     def _get_buffer(self):
         capture_cmd = ['tmux', 'capture-pane', '-S', '-', '-t', self.session]
@@ -92,11 +97,20 @@ class Scene(BaseAction):
         return buffer
 
     def run(self):
+        # replace vars if needed
+        for var in self.movie.vars:
+            if var in self.cmd:
+                self.cmd = self.cmd.replace(var, self.movie.vars[var])
         self.emulate_typing(self.cmd, self.session, discard=False)
         self.send_enter(self.session)
         # output will be after the sent command. Remove old buffer first:
         b = self._get_buffer()[len(self.original_buffer):]
         self.output = b.split(self.cmd)[-1].strip('\n')
+        for var, regex in self.to_keep.items():
+            match = regex.findall(self.output)
+            if match:
+                # TODO support multiple outputs
+                self.movie.vars[var] = match[0]
 
 
 class Movie:
@@ -105,12 +119,17 @@ class Movie:
         self.session_name = name
         self.output_file = output_file
         self.reel = None
+        self.vars = {}
 
     def shoot(self):
         """shoot the movie."""
         self.reel = Command('tmux new-session -d -s %s' % self.session_name)
         # start filming
-        asciinema_cmd = 'asciinema rec -c "tmux attach -t %s" -y %s'
+        asciinema_cmd = 'asciinema rec -c "tmux attach -t %s" -y'
+        if self.script.get('title'):
+            asciinema_cmd += ' -t %s' % pipes.quote(self.script.get('title'))
+        asciinema_cmd += ' %s'
+        print asciinema_cmd % (self.session_name, self.output_file)
         movie = subprocess.Popen(asciinema_cmd % (self.session_name,
                                                   self.output_file),
                                  stdout=subprocess.PIPE,
@@ -119,7 +138,8 @@ class Movie:
         for scene in self.script['scenes']:
             print "Rolling scene \"%s\"..." % scene['name'],
             if 'action' in scene:
-                s = Scene(scene['name'], scene['action'], self.session_name)
+                s = Scene(scene['name'], scene['action'], self.session_name,
+                          scene.get('keep', {}), self)
             elif 'line' in scene:
                 s = Dialogue(scene['line'], self.session_name)
             else:
