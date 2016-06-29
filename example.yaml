@@ -2,6 +2,8 @@ title: a beautiful movie
 scenes: 
   - name: Noice
     line: Here is a list of files. Nice!
+  - name: just a pause
+    pause: 3
   - name: listing
     action: ls -al
     keep:
@@ -9,5 +11,6 @@ scenes:
         regex: \w+\.md$
   - name: show file(s)
     action: cat myfile
+    wait: true
   - name: end
     line: Hope you enjoyed it!

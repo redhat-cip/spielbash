@@ -19,6 +19,24 @@ def pause(t):
     time.sleep(t)
 
 
+def is_process_running_in_tmux(session):
+    """Find out whether there is a process currently running or not in tmux"""
+    # since processes are launched as bash -c 'xx yy zz' the only pid
+    # we can get at first is the one of the bash process.
+    cmd = 'tmux list-panes -a -F #{pane_pid} -t %s' % session
+    father = subprocess.Popen(cmd.split(' '), stdout=subprocess.PIPE,
+                              stderr=subprocess.PIPE)
+    father = father.stdout.readlines()[0].strip('\n')
+    # then we just check whether this process still has children:
+    cmd = 'pgrep -P %s' % father
+    child = subprocess.Popen(cmd.split(' '), stdout=subprocess.PIPE,
+                             stderr=subprocess.PIPE)
+    child = child.stdout.readlines()
+    if child:
+        return child[0].strip('\n')
+    return False
+
+
 class Command(object):
     def __init__(self, cmd):
         if not isinstance(cmd, list):
@@ -65,6 +83,17 @@ class BaseAction:
         tmux.output
 
 
+class PressKey:
+    def __init__(self, key, session):
+        self.key = {'ENTER': 'C-m',
+                    'BACKSPACE': 'C-h'}.get(key.upper(), 'C-m')
+        self.session = session
+
+    def run(self):
+        tmux = TmuxSendKeys(self.session, self.key)
+        tmux.output
+
+
 class Dialogue(BaseAction):
     def __init__(self, line, session):
         self.line = line
@@ -75,13 +104,15 @@ class Dialogue(BaseAction):
 
 
 class Scene(BaseAction):
-    def __init__(self, name, cmd, session, keep, movie, *args, **kwargs):
+    def __init__(self, name, cmd, session, keep, movie,
+                 wait_for_execution, *args, **kwargs):
         self.name = name
         self.cmd = cmd
         self.session = session
         self.original_buffer = self._get_buffer().strip('\n')
         self.output = None
         self.movie = movie
+        self.wait_for_execution = wait_for_execution
         self.to_keep = dict((u['var'],
                              re.compile(u['regex'], re.M)) for u in keep)
 
@@ -103,6 +134,9 @@ class Scene(BaseAction):
                 self.cmd = self.cmd.replace(var, self.movie.vars[var])
         self.emulate_typing(self.cmd, self.session, discard=False)
         self.send_enter(self.session)
+        if self.wait_for_execution:
+            while is_process_running_in_tmux(self.session):
+                pause(0.1)
         # output will be after the sent command. Remove old buffer first:
         b = self._get_buffer()[len(self.original_buffer):]
         self.output = b.split(self.cmd)[-1].strip('\n')
@@ -135,17 +169,29 @@ class Movie:
                                  stdout=subprocess.PIPE,
                                  stderr=subprocess.PIPE,
                                  shell=True)
+        # pause to make sure asciinema is ready
+        pause(0.4)
         for scene in self.script['scenes']:
             print "Rolling scene \"%s\"..." % scene['name'],
+            s = None
             if 'action' in scene:
-                s = Scene(scene['name'], scene['action'], self.session_name,
-                          scene.get('keep', {}), self)
+                s = Scene(scene['name'], scene.get('action', ''),
+                          self.session_name,
+                          scene.get('keep', {}), self,
+                          wait_for_execution=scene.get('wait', False))
             elif 'line' in scene:
                 s = Dialogue(scene['line'], self.session_name)
+            elif 'press_key' in scene:
+                s = PressKey(scene['press_key'], self.session_name)
+            elif 'pause' in scene:
+                pause(scene.get('pause', 1))
+                s = None
             else:
                 sys.exit(1)
-            s.run()
+            if s:
+                s.run()
             print " Cut !"
+            pause(READING_TIME)
         TmuxSendKeys(self.session_name, 'exit')
         TmuxSendKeys(self.session_name, 'C-m')
         self.reel.communicate('exit')
