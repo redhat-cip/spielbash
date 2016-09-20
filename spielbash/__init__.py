@@ -38,7 +38,7 @@ def is_process_running_in_tmux(session):
     """Find out whether there is a process currently running or not in tmux"""
     # since processes are launched as bash -c 'xx yy zz' the only pid
     # we can get at first is the one of the bash process.
-    cmd = 'tmux list-panes -a -F #{pane_pid} -t %s' % session
+    cmd = 'tmux list-panes -F #{pane_pid} -t %s' % session
     father = subprocess.Popen(cmd.split(' '), stdout=subprocess.PIPE,
                               stderr=subprocess.PIPE)
     father = father.stdout.readlines()[0].strip('\n')
