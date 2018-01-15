@@ -25,7 +25,7 @@ except ImportError:
 
 try:
     import multiprocessing  # noqa
-except:
+except ImportError:
     pass
 
 
