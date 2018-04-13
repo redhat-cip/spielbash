@@ -141,7 +141,7 @@ class Scene(BaseAction):
         buffer = subprocess.Popen(['tmux', 'show-buffer'],
                                   stdout=subprocess.PIPE,
                                   stderr=subprocess.PIPE).communicate()[0]
-        return buffer
+        return str(buffer)
 
     def run(self):
         # replace vars if needed
@@ -175,7 +175,7 @@ class Movie:
         """shoot the movie."""
         self.reel = Command('tmux new-session -d -s %s' % self.session_name)
         # start filming
-        asciinema_cmd = 'asciinema rec -c "tmux attach -t %s" -y'
+        asciinema_cmd = 'asciinema rec -c "tmux attach -t %s" -y --overwrite'
         if self.script.get('title'):
             asciinema_cmd += ' -t %s' % pipes.quote(self.script.get('title'))
         asciinema_cmd += ' %s'
