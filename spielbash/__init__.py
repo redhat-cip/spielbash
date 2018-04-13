@@ -15,6 +15,7 @@
 # under the License.
 # -*- coding: utf-8 -*-
 
+from __future__ import print_function
 import argparse
 import json
 import pipes
@@ -186,7 +187,7 @@ class Movie:
         # pause to make sure asciinema is ready
         pause(0.4)
         for scene in self.script['scenes']:
-            print "Rolling scene \"%s\"..." % scene['name'],
+            print('Rolling scene %r...' % scene['name'])
             s = None
             if 'action' in scene:
                 s = Scene(scene['name'], scene.get('action', ''),
@@ -204,7 +205,7 @@ class Movie:
                 sys.exit(1)
             if s:
                 s.run()
-            print " Cut !"
+            print(" Cut !")
             pause(READING_TIME)
         TmuxSendKeys(self.session_name, 'exit')
         TmuxSendKeys(self.session_name, 'C-m')
@@ -233,7 +234,7 @@ def main():
     # CAMERAS, LIGHTS AAAAAAAND ACTION !
     out, err = movie.shoot()
     if err:
-        print err
+        print(err)
     else:
         # set default width and height
         with open(output_file, 'r') as m:
@@ -244,9 +245,9 @@ def main():
             j['height'] = 25
         with open(output_file, 'w') as m:
             json.dump(j, m)
-        print "movie recorded as %s" % output_file
-        print "to replay: asciinema play %s" % output_file
-        print "to upload: asciinema upload %s" % output_file
+        print("movie recorded as", output_file)
+        print("to replay: asciinema play", output_file)
+        print("to upload: asciinema upload", output_file)
 
 
 if __name__ == '__main__':
