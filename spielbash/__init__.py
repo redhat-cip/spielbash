@@ -213,8 +213,9 @@ class Movie:
             print("\r Cut !")
             pause(READING_TIME * 2)
         TmuxSendKeys(self.session_name, 'exit\n')
-        TmuxSendKeys(self.session_name, 'C-d')
-        movie.expect(pexpect.EOF)
+        TmuxSendKeys(self.session_name, 'C-m')
+        self.reel.communicate('exit')
+        movie.kill(0)
 
 
 def strip_logout(lines):
