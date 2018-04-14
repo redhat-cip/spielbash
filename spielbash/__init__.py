@@ -15,11 +15,12 @@
 # under the License.
 # -*- coding: utf-8 -*-
 
+from __future__ import print_function
 import argparse
-import json
 import pipes
 import re
 import subprocess
+import pexpect
 import sys
 import time
 import yaml
@@ -28,6 +29,8 @@ import yaml
 # TODO should be settable
 READING_TIME = 2
 TYPING_SPEED = 0.1
+WIDTH = 160
+HEIGHT = 60
 
 
 def pause(t):
@@ -140,7 +143,7 @@ class Scene(BaseAction):
         buffer = subprocess.Popen(['tmux', 'show-buffer'],
                                   stdout=subprocess.PIPE,
                                   stderr=subprocess.PIPE).communicate()[0]
-        return buffer
+        return str(buffer)
 
     def run(self):
         # replace vars if needed
@@ -172,21 +175,24 @@ class Movie:
 
     def shoot(self):
         """shoot the movie."""
-        self.reel = Command('tmux new-session -d -s %s' % self.session_name)
+        self.reel = Command('tmux new-session -d -s %s -x %d -y %d' % (
+            self.session_name,
+            WIDTH,
+            HEIGHT
+        ))
+
         # start filming
-        asciinema_cmd = 'asciinema rec -c "tmux attach -t %s" -y'
+        asciinema_cmd = 'asciinema rec -c "tmux attach -t %s" -y --overwrite'
         if self.script.get('title'):
             asciinema_cmd += ' -t %s' % pipes.quote(self.script.get('title'))
         asciinema_cmd += ' %s'
-        movie = subprocess.Popen(asciinema_cmd % (self.session_name,
-                                                  self.output_file),
-                                 stdout=subprocess.PIPE,
-                                 stderr=subprocess.PIPE,
-                                 shell=True)
+        full_asciinema_cmd = asciinema_cmd % (self.session_name, self.output_file)
+        movie = pexpect.spawn(full_asciinema_cmd, dimensions=(HEIGHT, WIDTH))
+
         # pause to make sure asciinema is ready
         pause(0.4)
         for scene in self.script['scenes']:
-            print "Rolling scene \"%s\"..." % scene['name'],
+            print('\rRolling scene %r...' % scene['name'])
             s = None
             if 'action' in scene:
                 s = Scene(scene['name'], scene.get('action', ''),
@@ -204,26 +210,57 @@ class Movie:
                 sys.exit(1)
             if s:
                 s.run()
-            print " Cut !"
-            pause(READING_TIME)
-        TmuxSendKeys(self.session_name, 'exit')
+            print("\r Cut !")
+            pause(READING_TIME * 2)
+        TmuxSendKeys(self.session_name, 'exit\n')
         TmuxSendKeys(self.session_name, 'C-m')
         self.reel.communicate('exit')
-        out, err = movie.communicate()
-        return out, err
+        movie.kill(0)
+
+
+def strip_logout(lines):
+    '''Remove final logout from asciicast'''
+    stop = -1
+    for i, line in enumerate(lines):
+        if 'logout' in line or 'exit' in line:
+            stop = i
+            break
+    return lines[:stop]
 
 
 def main():
     parser = argparse.ArgumentParser(description="spielbash CLI")
+    parser.add_argument('--speed', metavar='Typing speed',
+                        help='Typing speed', type=float, default=TYPING_SPEED,
+                        required=False)
+    parser.add_argument('--readtime', metavar='Reading Time',
+                        help='Time to wait between scenes', type=float,
+                        required=False, default=READING_TIME)
+    parser.add_argument('--width', metavar='Console Width',
+                        help='Console width (cols)', type=int,
+                        required=False, default=WIDTH)
+    parser.add_argument('--height', metavar='Console Height',
+                        help='Console height (rows)', type=int,
+                        required=False, default=HEIGHT)
     parser.add_argument('--script', metavar='RaidersOfTheLostArk.yaml',
                         help='The script to execute with asciinema',
                         required=True)
-    parser.add_argument('--output', metavar='RaidersOfTheLostArk.json',
+    parser.add_argument('--output', metavar='RaidersOfTheLostArk.cast',
                         help='where to record the movie',
-                        required=False, default='movie.json')
+                        required=False, default='movie.cast')
     args = parser.parse_args()
     script_file = args.script
     output_file = args.output
+
+    global READING_TIME
+    global TYPING_SPEED
+    global WIDTH
+    global HEIGHT
+    READING_TIME = args.readtime
+    TYPING_SPEED = args.speed
+    WIDTH = args.width
+    HEIGHT = args.height
+
     try:
         with open(script_file, 'r') as s:
             script = yaml.load(s)
@@ -231,22 +268,20 @@ def main():
         sys.exit('There was a problem with loading the script: %s' % e)
     movie = Movie('howdy', script, output_file)
     # CAMERAS, LIGHTS AAAAAAAND ACTION !
-    out, err = movie.shoot()
-    if err:
-        print err
-    else:
-        # set default width and height
-        with open(output_file, 'r') as m:
-            j = json.load(m)
-        if not j.get('width'):
-            j['width'] = 80
-        if not j.get('height'):
-            j['height'] = 25
-        with open(output_file, 'w') as m:
-            json.dump(j, m)
-        print "movie recorded as %s" % output_file
-        print "to replay: asciinema play %s" % output_file
-        print "to upload: asciinema upload %s" % output_file
+    movie.shoot()
+
+    # set default width and height
+    with open(output_file, 'r') as m:
+        j = m.readlines()
+
+    j = strip_logout(j)
+
+    with open(output_file, 'w') as m:
+        m.writelines(j)
+
+    print("movie recorded as", output_file)
+    print("to replay: asciinema play", output_file)
+    print("to upload: asciinema upload", output_file)
 
 
 if __name__ == '__main__':

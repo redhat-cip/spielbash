@@ -49,6 +49,8 @@ setup(
         "License :: OSI Approved :: Apache Software License",
         "Operating System :: POSIX :: Linux",
         "Programming Language :: Python :: 2.7",
+        "Programming Language :: Python :: 3.5",
+        "Programming Language :: Python :: 3.6",
         "Topic :: System :: Distributed Computing"
     ],
     entry_points={
@@ -56,4 +58,8 @@ setup(
             'spielbash = spielbash:main'],
     },
     include_package_data=True,
+    install_requires=[
+        'pyyaml',
+        'pexpect'
+    ],
 )
